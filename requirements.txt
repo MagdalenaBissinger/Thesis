@@ -8,4 +8,3 @@ joblib
 numpy
 transformers
 torch
-fpdf
