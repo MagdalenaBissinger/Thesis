@@ -1,0 +1,11 @@
+pandas
+streamlit
+requests
+beautifulsoup4
+nltk
+scikit-learn
+joblib
+numpy
+transformers
+torch
+fpdf
