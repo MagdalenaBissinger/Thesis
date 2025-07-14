@@ -15,9 +15,7 @@ import numpy as np
 from transformers import DistilBertTokenizer, DistilBertModel
 import torch
 import time
-from fpdf import FPDF
 from io import BytesIO
-
 
 
 nltk.download('stopwords')
