@@ -1,3 +1,4 @@
+#Importing necessary libraries
 import pandas as pd
 import streamlit as st
 import os
@@ -17,32 +18,42 @@ import torch
 import time
 from io import BytesIO
 
-
+# Download NLTK stopwords 
 nltk.download('stopwords')
 stop_words = set(stopwords.words('english'))
 
-# Feature extraction from URL content
-def extract_features_from_url(url):
-    try:
-        response = requests.get(url, timeout=5)
-        response.raise_for_status()
-        html_content = response.text
-        
-    except requests.exceptions.Timeout:
-        st.error("⏱️ Network timeout while trying to reach the website.")
-        return None
-    except requests.exceptions.RequestException as e:
-        st.error(f"🔌 Failed to retrieve website: {e}")
-        return None
 
+def get_url_with_retry(url, retries=3, delay=2):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0 Safari/537.36'
+    }
+    for attempt in range(retries):
+        try:
+            response = requests.get(url, headers=headers, timeout=5)
+            response.raise_for_status()
+            return response.text, response
+        except requests.exceptions.RequestException as e:
+            if attempt < retries - 1:
+                time.sleep(delay)
+                continue
+            else:
+                st.error(f"🔌 Failed to retrieve website: {e}")
+                return None, None
+
+
+# Function to extract features from a given URL
+def extract_features_from_url(url):
+    html_content, response = get_url_with_retry(url)
+    if html_content is None:
+        return None
+        
     try:
         soup = BeautifulSoup(html_content, 'html.parser')
-
         parsed = urlparse(url)
         domain = parsed.netloc
         path = parsed.path
 
-
+    # Handle potential parsing issues
     except Exception:
         st.error("❌ Failed to parse HTML content.")
         return None
@@ -53,14 +64,17 @@ def extract_features_from_url(url):
         load_time = time.time() - start_time
         response.raise_for_status()
         html_content = response.text
+
+    # Handle potential network issues
     except requests.exceptions.Timeout:
             st.error("⏱️ Network timeout while trying to reach the website.")
             return None
 
-
     try:
         ip_check = socket.inet_aton(domain.split(':')[0]) 
         is_ip = 1
+
+    # Handle cases where domain is not an IP address
     except socket.error:
         is_ip = 0
 
@@ -87,7 +101,7 @@ def extract_features_from_url(url):
         line_of_code = len(text_lines)
 
 
-         # NoOfObfuscatedChar = count of non-alphanumeric chars in URL
+        # NoOfObfuscatedChar = count of non-alphanumeric chars in URL
         no_of_obfuscated_char = len(re.findall(r'[^a-zA-Z0-9]', url))
 
         # CharContinuationRate = ratio of repeated characters sequence length / URL length
@@ -105,7 +119,6 @@ def extract_features_from_url(url):
         spacial_char_ratio_in_url = len(special_chars) / len(url) if len(url) > 0 else 0
 
         # NoOfPopup - count occurrences of popup-related scripts in HTML
-        # Simplified: count how many times "popup" appears in JS or HTML content (case-insensitive)
         no_of_popup = len(re.findall(r'popup', html_content, re.IGNORECASE))
 
         # HasExternalFormSubmit - any <form> whose action domain != current domain
@@ -143,6 +156,7 @@ def extract_features_from_url(url):
                 has_password_field = 1
                 break
 
+    # Error handling for feature extraction
     except Exception:
         st.error("⚠️ Error during content processing.")
         return None
@@ -183,16 +197,21 @@ def extract_features_from_url(url):
 
     }
 
-#Load the pre-trained model
-
-# Load BERT model/tokenizer
+#Load the pre-trained BERT model
 tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
-bert_model = DistilBertModel.from_pretrained("distilbert-base-uncased", _fast_init=True)
+#bert_model = DistilBertModel.from_pretrained("distilbert-base-uncased", _fast_init=True)
+bert_model = DistilBertModel.from_pretrained("distilbert-base-uncased")
 bert_model.eval()
 #print("Model device:", next(bert_model.parameters()).device) 
 
-def get_bert_embedding(features):
+# Function to ensure URL starts with http:// or https://
+def add_https_if_missing(url):
+    if not url.startswith(('http://', 'https://')):
+        return 'https://' + url
+    return url
 
+# Function to get BERT embeddings for the input features
+def get_bert_embedding(features):
     title = features.get("Title") or ""
     meta_desc = features.get("Meta_Description") or ""
     headings = features.get("Headings") or ""
@@ -202,25 +221,29 @@ def get_bert_embedding(features):
     inputs = tokenizer([combined_text], padding=True, truncation=True, return_tensors="pt")
     
     device = next(bert_model.parameters()).device
-    inputs = {key: value.to("cpu") for key, value in inputs.items()}  # Ensure inputs are on CPU
+    inputs = {key: value.to("cpu") for key, value in inputs.items()}  
 
     with torch.no_grad():
         outputs = bert_model(**inputs)
-        cls_embeddings = outputs.last_hidden_state[:, 0, :]  # shape (1, 768)
+        cls_embeddings = outputs.last_hidden_state[:, 0, :]  
 
     return cls_embeddings.cpu().numpy()[0]
 
-
-clf = joblib.load('random_forest_model_2.pkl')
-xgb = joblib.load('xgboost_model.pkl')
-scaler = joblib.load('scaler_2.pkl')
+# Load pre-trained models and scaler
+clf = joblib.load('random_forest_21.07.pkl')
+xgb = joblib.load('xgboost_model_21.07.pkl')
+scaler = joblib.load('scaler_21.07.pkl')
 
 
 #Streamlit app setup
 st.title("🔍 Phising Webiste Scanner")
 st.write("Enter a URL below to check whether webiste is **legitimate or phishing**.")
-url = st.text_input("Enter URL:", "")
 
+url = st.text_input("Enter URL:", "")
+if url:
+    url = add_https_if_missing(url)
+
+# Custom CSS for styling
 st.markdown("""
     <style>
         body {
@@ -270,25 +293,24 @@ if st.button("Check Webiste Trust and Quality"):
                             "NoOfPopup", "HasExternalFormSubmit", "NoOfImage",
                             "HasSubmitButton", "HasHiddenFields", "HasPasswordField", "LineOfCode"
                         ]
-            selected_num_cols_2 = ["LineOfCode", "HasCopyrightInfo", "HasTitle", "HasExternalFormSubmit", "NoOfSubDomain", "NoOfURLRedirect", "NoOfJS", "HasSubmitButton", "NoOfCSS"
-            ]
-            # Load BERT embeddings for input URL (you need a way to generate it live)
-            bert_embedding = get_bert_embedding(features)  # must return shape (768,)
-            X_input_num = np.array([[features[col] for col in selected_num_cols_2]])
+            
+            # Load BERT embeddings for input URL 
+            bert_embedding = get_bert_embedding(features) 
+            X_input_num = np.array([[features[col] for col in selected_num_cols]])
             X_input_num_scaled = scaler.transform(X_input_num)
 
             X_combined = np.hstack([X_input_num_scaled, bert_embedding.reshape(1, -1)])
             
             if model_choice == "Random Forest":
                 prediction = clf.predict(X_combined)[0]
-                prob_phishing = clf.predict_proba(X_combined)[0][1]
+                prob_phishing = clf.predict_proba(X_combined)[0][1] 
+                trust_score = int((1 - prob_phishing) * 9) + 1
             else:  # XGBoost
                 prediction = xgb.predict(X_combined)[0]
                 prob_phishing = xgb.predict_proba(X_combined)[0][1]
+                trust_score = int(prob_phishing * 9) + 1
 
-            trust_score = int((1 - prob_phishing) * 9) + 1
-           
-           # 0 label is phishing, 1 is legitimate
+            # 0 label is phishing, 1 is legitimate
             if prediction == 0:
                 st.error(f"🚨 **WARNING! This site might be a PHISHING site!** (Risk: {trust_score}/10)")
             else:
@@ -296,45 +318,48 @@ if st.button("Check Webiste Trust and Quality"):
             
             with st.expander("🔍 Page Details"):
                     st.info(f"**Title**: {features['Title']}")
+                    if features['IsHTTPS'] == 1:
+                        st.markdown('<span style="color: green; font-weight: bold;">HTTPS: Yes ✅</span>', unsafe_allow_html=True)
+                    else:
+                        st.markdown('<span style="color: red; font-weight: bold;">HTTPS: No ❌</span>', unsafe_allow_html=True)
                     st.write(f"**Meta Description**: {features['Meta_Description']}")
                     st.write(f"**Headings**: {features['Headings']}")
-                    st.write(f"**Word Count**: {features['Word_Count']}")
+                    #st.write(f"**Word Count**: {features['Word_Count']}")
                     st.write(f"**Load Time**: {features['Load_Time']} seconds")
                     
-                    #Just for checking:
-                    st.write(
-                    f"**URL Length**: {features['URLLength']} | "
-                    f"**Domain Length**: {features['DomainLength']} | "
-                    f"**TLD Length**: {features['TLDLength']} | "
-                    f"**Is Domain IP**: {features['IsDomainIP']} | "
-                    f"**Subdomains**: {features['NoOfSubDomain']} | "
-                    f"**HTTPS**: {features['IsHTTPS']} | "
-                    f"**Title Present**: {features['HasTitle']} | "
-                    f"**Largest Line Length**: {features['LargestLineLength']} | "
-                    f"**Favicon**: {features['HasFavicon']} | "
-                    f"**Redirects**: {features['NoOfURLRedirect']} | "
-                    f"**Meta Description Present**: {features['HasDescription']} | "
-                    f"**Copyright Info**: {features['HasCopyrightInfo']} | "
-                    f"**JavaScript Files**: {features['NoOfJS']}")
+                    # Just for checking:
+                    #st.write(
+                    #f"**URL Length**: {features['URLLength']} | "
+                    #f"**Domain Length**: {features['DomainLength']} | "
+                    #f"**TLD Length**: {features['TLDLength']} | "
+                    #f"**Is Domain IP**: {features['IsDomainIP']} | "
+                    #f"**Subdomains**: {features['NoOfSubDomain']} | "
+                    #f"**HTTPS**: {'Yes ✅' if features['IsHTTPS'] == 1 else 'No ❌'} "
+                    #f"**Title Present**: {features['HasTitle']} | "
+                    #f"**Largest Line Length**: {features['LargestLineLength']} | "
+                    #f"**Favicon**: {features['HasFavicon']} | "
+                    #f"**Redirects**: {features['NoOfURLRedirect']} | "
+                    #f"**Meta Description Present**: {features['HasDescription']} | "
+                    #f"**Copyright Info**: {features['HasCopyrightInfo']} | "
+                    #f"**JavaScript Files**: {features['NoOfJS']}")
 
-                    st.write(
-                    f"**No of CSS Files**: {features['NoOfCSS']} | "
-                    f"**Letter Ratio in URL**: {features['LetterRatioInURL']:.2f} | "
-                    f"**Digit Ratio in URL**: {features['DegitRatioInURL']:.2f} | "
-                    f"**Special Char Ratio in URL**: {features['SpacialCharRatioInURL']:.2f} | "
-                    f"**Popups**: {features['NoOfPopup']} | "
-                    f"**External Form Submit**: {features['HasExternalFormSubmit']} | "
-                    f"**Images**: {features['NoOfImage']} | "
-                    f"**Submit Button**: {features['HasSubmitButton']} | "
-                    f"**Hidden Fields**: {features['HasHiddenFields']} | "
-                    f"**Password Field**: {features['HasPasswordField']}"
-                    )
+                    #st.write(
+                    #f"**No of CSS Files**: {features['NoOfCSS']} | "
+                    #f"**Letter Ratio in URL**: {features['LetterRatioInURL']:.2f} | "
+                    #f"**Digit Ratio in URL**: {features['DegitRatioInURL']:.2f} | "
+                    #f"**Special Char Ratio in URL**: {features['SpacialCharRatioInURL']:.2f} | "
+                    #f"**Popups**: {features['NoOfPopup']} | "
+                    #f"**External Form Submit**: {features['HasExternalFormSubmit']} | "
+                    #f"**Images**: {features['NoOfImage']} | "
+                    #f"**Submit Button**: {features['HasSubmitButton']} | "
+                    #f"**Hidden Fields**: {features['HasHiddenFields']} | "
+                    #f"**Password Field**: {features['HasPasswordField']}")
 
         else:
             st.warning("Unable to analyze this URL due to an error.")
 
+# Sidebar content - instructions and model info
 with st.sidebar:
-    #st.image("", width=300)
     st.subheader(" 🛠️ How It Works")
     st.write("""
     - Extracts SEO, URL & NLP-based features from the website
