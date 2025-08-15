@@ -230,10 +230,10 @@ def get_bert_embedding(features):
     return cls_embeddings.cpu().numpy()[0]
 
 # Load pre-trained models and scaler
-clf = joblib.load('random_forest_21.07.pkl')
-xgb = joblib.load('xgboost_model_21.07.pkl')
-scaler = joblib.load('scaler_21.07.pkl')
-
+clf = joblib.load('random_forest_model.pkl')
+xgb = joblib.load('xgboost_model.pkl')
+clf_scaler = joblib.load('clf_scaler.pkl')
+xgb_scaler = joblib.load('xgb_scaler.pkl')
 
 #Streamlit app setup
 st.title("🔍 Phising Webiste Scanner")
@@ -302,19 +302,35 @@ if st.button("Check Webiste Trust and Quality"):
             X_combined = np.hstack([X_input_num_scaled, bert_embedding.reshape(1, -1)])
             
             if model_choice == "Random Forest":
+                X_input_num_scaled = scaler_clf.transform(X_input_num)
+                X_combined = np.hstack([bert_embedding.reshape(1, -1), X_input_num_scaled])
                 prediction = clf.predict(X_combined)[0]
+                print(prediction)
                 prob_phishing = clf.predict_proba(X_combined)[0][1] 
-                trust_score = int((1 - prob_phishing) * 9) + 1
-            else:  # XGBoost
-                prediction = xgb.predict(X_combined)[0]
-                prob_phishing = xgb.predict_proba(X_combined)[0][1]
-                trust_score = int(prob_phishing * 9) + 1
+                print(prob_phishing)
+                trust_score = 10 - int(prob_phishing * 10)
 
-            # 0 label is phishing, 1 is legitimate
-            if prediction == 0:
-                st.error(f"🚨 **WARNING! This site might be a PHISHING site!** (Risk: {trust_score}/10)")
-            else:
-                st.success(f"✅ **This site appears to be SAFE.** (Risk: {trust_score}/10)")
+                if prob_phishing <= 0.5:
+                    st.error(f"🚨 **WARNING! This site might be a PHISHING site!** (Risk: {trust_score}/10)")
+                else:
+                    st.success(f"✅ **This site appears to be SAFE.** (Risk: {trust_score}/10)")
+            
+            else:  # XGBoost
+                X_input_num_scaled = scaler_xgb.transform(X_input_num)
+                X_combined = np.hstack([bert_embedding.reshape(1,-1), X_input_num_scaled])
+                prediction = xgb.predict(X_combined)[0]
+                print(prediction)
+                prob_phishing_xgb = xgb.predict_proba(X_combined)[0][1]
+                print(prob_phishing_xgb)
+                if prob_phishing_xgb > 0.1:
+                    trust_score_xgb = abs(int(prob_phishing_xgb * 10))
+                else:
+                    trust_score_xgb = abs(10 - (int(prob_phishing_xgb * 100)))
+    
+                if prob_phishing_xgb >= 0.1:
+                    st.success(f"✅ **This site appears to be SAFE.** (Risk: {trust_score_xgb}/10)")
+                else:
+                     st.error(f"🚨 **WARNING! This site might be a PHISHING site!** (Risk: {trust_score_xgb}/10)")
             
             with st.expander("🔍 Page Details"):
                     st.info(f"**Title**: {features['Title']}")
@@ -366,4 +382,5 @@ with st.sidebar:
     - Uses a trained model Random Forest or XGBoost combined with BERT embeddings.
     - Returns a risk level: **Safe** 🟢 or **Phishing** 🔴""")
     st.markdown("---")
+
     st.sidebar.markdown(f"**📌 Model Used:** {model_choice}")
