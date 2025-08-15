@@ -341,7 +341,7 @@ if st.button("Check Webiste Trust and Quality"):
             X_input_num = np.array([[features[col] for col in selected_num_cols]])
             
             if model_choice == "Random Forest":
-                X_input_num_scaled = scaler_clf.transform(X_input_num)
+                X_input_num_scaled = clf_scaler.transform(X_input_num)
                 X_combined = np.hstack([bert_embedding.reshape(1, -1), X_input_num_scaled])
                 prediction = clf.predict(X_combined)[0]
                 prob_phishing = clf.predict_proba(X_combined)[0][1] 
@@ -353,7 +353,7 @@ if st.button("Check Webiste Trust and Quality"):
                     st.success(f"✅ **This site appears to be SAFE.** (Risk: {trust_score}/10)")
             
             else:  # XGBoost
-                X_input_num_scaled = scaler_xgb.transform(X_input_num)
+                X_input_num_scaled = xgb_scaler.transform(X_input_num)
                 X_combined = np.hstack([bert_embedding.reshape(1,-1), X_input_num_scaled])
                 prediction = xgb.predict(X_combined)[0]
                 prob_phishing_xgb = xgb.predict_proba(X_combined)[0][1]
@@ -419,5 +419,6 @@ with st.sidebar:
     st.markdown("---")
 
     st.sidebar.markdown(f"**📌 Model Used:** {model_choice}")
+
 
 
