@@ -1,4 +1,4 @@
-#Importing necessary libraries
+# Importing necessary libraries
 import pandas as pd
 import streamlit as st
 import os
@@ -22,7 +22,7 @@ from io import BytesIO
 nltk.download('stopwords')
 stop_words = set(stopwords.words('english'))
 
-
+# Funtion for trying to access the webiste three times
 def get_url_with_retry(url, retries=3, delay=2):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0 Safari/537.36'
@@ -197,12 +197,54 @@ def extract_features_from_url(url):
 
     }
 
+# Cleaning the catche folder if exists (errors without doing that)
+CACHE_DIR = os.path.expanduser("~/.cache/huggingface/transformers")
+
+def clear_transformers_cache():
+    if os.path.exists(CACHE_DIR):
+        print(f"Clearing Huggingface cache at {CACHE_DIR} ...")
+        shutil.rmtree(CACHE_DIR)
+        print("Cache cleared.")
+    else:
+        print("Cache folder not found, skipping clear.")
+
 #Load the pre-trained BERT model
-tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
-#bert_model = DistilBertModel.from_pretrained("distilbert-base-uncased", _fast_init=True)
-bert_model = DistilBertModel.from_pretrained("distilbert-base-uncased")
-bert_model.eval()
-#print("Model device:", next(bert_model.parameters()).device) 
+def load_bert_model():
+    try:
+        print("Loading tokenizer and model...")
+        tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+        model = DistilBertModel.from_pretrained("distilbert-base-uncased")
+        
+        # Check if model params are still meta tensors
+        is_meta = all(param.device.type == 'meta' for param in model.parameters())
+        if is_meta:
+            device = torch.device("cpu")
+            model.to_empty(device)
+            raise RuntimeError("Model parameters are meta tensors (weights not loaded)")
+        
+        model.eval()
+        device = torch.device("cpu")
+        model.to(device)
+        print("Model loaded and moved to CPU successfully.")
+        return tokenizer, model
+
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        print("Clearing cache and retrying download...")
+        clear_transformers_cache()
+        
+        # Retry once after cache clear
+        tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+        model = DistilBertModel.from_pretrained("distilbert-base-uncased")
+        
+        model.eval()
+        device = torch.device("cpu")
+        model.to(device)
+        print("Model reloaded after cache clear.")
+        return tokenizer, model
+
+# Usage in your main code
+tokenizer, bert_model = load_bert_model()
 
 # Function to ensure URL starts with http:// or https://
 def add_https_if_missing(url):
@@ -302,9 +344,7 @@ if st.button("Check Webiste Trust and Quality"):
                 X_input_num_scaled = scaler_clf.transform(X_input_num)
                 X_combined = np.hstack([bert_embedding.reshape(1, -1), X_input_num_scaled])
                 prediction = clf.predict(X_combined)[0]
-                print(prediction)
                 prob_phishing = clf.predict_proba(X_combined)[0][1] 
-                print(prob_phishing)
                 trust_score = 10 - int(prob_phishing * 10)
 
                 if prob_phishing <= 0.5:
@@ -316,9 +356,7 @@ if st.button("Check Webiste Trust and Quality"):
                 X_input_num_scaled = scaler_xgb.transform(X_input_num)
                 X_combined = np.hstack([bert_embedding.reshape(1,-1), X_input_num_scaled])
                 prediction = xgb.predict(X_combined)[0]
-                print(prediction)
                 prob_phishing_xgb = xgb.predict_proba(X_combined)[0][1]
-                print(prob_phishing_xgb)
                 if prob_phishing_xgb > 0.1:
                     trust_score_xgb = abs(int(prob_phishing_xgb * 10))
                 else:
@@ -381,4 +419,5 @@ with st.sidebar:
     st.markdown("---")
 
     st.sidebar.markdown(f"**📌 Model Used:** {model_choice}")
+
 
