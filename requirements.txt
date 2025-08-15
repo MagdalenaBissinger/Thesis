@@ -10,5 +10,6 @@ torchvision==0.23.0
 transformers==4.55.0
 wordcloud==1.9.4
 xgboost==3.0.0
+beautifulsoup4
 
 
