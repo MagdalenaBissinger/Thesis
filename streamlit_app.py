@@ -297,9 +297,6 @@ if st.button("Check Webiste Trust and Quality"):
             # Load BERT embeddings for input URL 
             bert_embedding = get_bert_embedding(features) 
             X_input_num = np.array([[features[col] for col in selected_num_cols]])
-            X_input_num_scaled = scaler.transform(X_input_num)
-
-            X_combined = np.hstack([X_input_num_scaled, bert_embedding.reshape(1, -1)])
             
             if model_choice == "Random Forest":
                 X_input_num_scaled = scaler_clf.transform(X_input_num)
@@ -384,3 +381,4 @@ with st.sidebar:
     st.markdown("---")
 
     st.sidebar.markdown(f"**📌 Model Used:** {model_choice}")
+
