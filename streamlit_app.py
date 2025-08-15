@@ -337,13 +337,7 @@ if st.button("Check Webiste Trust and Quality"):
         with st.spinner("Analyzing website..."):
             features = extract_features_from_url(url)
         if features:
-            selected_num_cols = [
-                            "URLLength", "DomainLength", "TLDLength", "IsDomainIP", "NoOfSubDomain",
-                            "IsHTTPS", "HasTitle", "LargestLineLength", "HasFavicon",
-                            "HasDescription", "HasCopyrightInfo", "NoOfJS", "NoOfURLRedirect", "Word_Count", "NoOfCSS", "LetterRatioInURL", "DegitRatioInURL", "SpacialCharRatioInURL",
-                            "NoOfPopup", "HasExternalFormSubmit", "NoOfImage",
-                            "HasSubmitButton", "HasHiddenFields", "HasPasswordField", "LineOfCode"
-                        ]
+            selected_num_cols = ["LineOfCode", "LetterRatioInURL", "NoOfCSS", "DegitRatioInURL", "NoOfPopup", "HasExternalFormSubmit", "NoOfImage","HasSubmitButton", "HasHiddenFields", "HasPasswordField", "SpacialCharRatioInURL", "URLLength", "DomainLength", "TLDLength", "IsDomainIP", "NoOfSubDomain", "IsHTTPS", "HasTitle", "LargestLineLength","HasFavicon","NoOfURLRedirect", "HasDescription","HasCopyrightInfo","NoOfJS", "Word_Count"]
             
             # Load BERT embeddings for input URL 
             bert_embedding = get_bert_embedding(features) 
@@ -428,6 +422,7 @@ with st.sidebar:
     st.markdown("---")
 
     st.sidebar.markdown(f"**📌 Model Used:** {model_choice}")
+
 
 
 
