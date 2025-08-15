@@ -18,6 +18,10 @@ import torch
 import time
 from io import BytesIO
 
+# Cleaning the streamlit cache
+st.cache_data.clear()
+st.cache_resource.clear()
+
 # Download NLTK stopwords 
 nltk.download('stopwords')
 stop_words = set(stopwords.words('english'))
@@ -272,10 +276,15 @@ def get_bert_embedding(features):
     return cls_embeddings.cpu().numpy()[0]
 
 # Load pre-trained models and scaler
+seed = 42
 clf = joblib.load('random_forest_model.pkl')
 xgb = joblib.load('xgboost_model.pkl')
 clf_scaler = joblib.load('clf_scaler.pkl')
 xgb_scaler = joblib.load('xgb_scaler.pkl')
+clf.random_state = seed
+clf.n_jobs = 1
+xgb.seed = seed
+xgb.nthread = 1
 
 #Streamlit app setup
 st.title("🔍 Phising Webiste Scanner")
@@ -419,6 +428,7 @@ with st.sidebar:
     st.markdown("---")
 
     st.sidebar.markdown(f"**📌 Model Used:** {model_choice}")
+
 
 
 
